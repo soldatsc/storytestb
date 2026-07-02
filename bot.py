@@ -151,15 +151,24 @@ dp = Dispatcher()
 
 HELP = (
     "🎨 <b>Krea Prompt Lab</b>\n\n"
-    "Пришли <b>промт текстом</b> — верну картинку с нашей нейронки "
-    "(Krea 2 Turbo + realism LoRA). Без лимитов, тестируй сколько нужно.\n\n"
-    "<b>Параметры</b> (опционально, после <code>|</code>):\n"
-    "<code>девушка в красном платье | size=832x1216 seed=42 lora=1.2</code>\n\n"
+    "Пришли <b>готовый промт на английском</b> — верну картинку с нашей "
+    "нейронки (Krea 2 Turbo + realism LoRA). Без лимитов.\n\n"
+    "💡 <b>Как писать под нашу модель:</b>\n"
+    "• только <b>английский</b>\n"
+    "• <b>связным описанием</b>, а не теги через запятую\n"
+    "• опиши: кто · внешность · одежда · поза · сцена · свет · стиль\n\n"
+    "<b>Пример:</b>\n"
+    "<code>a young woman with red hair and freckles, wearing a green summer "
+    "dress, sitting in a cozy cafe by the window, soft warm daylight, "
+    "photorealistic, shallow depth of field</code>\n\n"
+    "<b>Параметры</b> (опц., в конце после <code>|</code>):\n"
+    "<code>...промт... | size=832x1216 seed=42 lora=1.2 steps=8</code>\n"
     "• <code>size=ШхВ</code> — разрешение (дефолт 832×1216, портрет)\n"
     "• <code>seed=N</code> — зафиксировать сид (повторяемость)\n"
-    "• <code>steps=N</code> — шаги (дефолт 8)\n"
-    "• <code>lora=N</code> — сила realism-LoRA (дефолт 1.0, 0 = выкл)\n\n"
-    "Под картинкой — 🎲 (новый сид) и 🔁 (тот же сид)."
+    "• <code>lora=N</code> — сила realism-LoRA (дефолт 1.0, 0 = выкл)\n"
+    "• <code>steps=N</code> — шаги (дефолт 8)\n\n"
+    "Под картинкой — 🎲 новый сид · 🔁 тот же сид. В подписи виден seed — "
+    "записывай удачные промпты."
 )
 
 
@@ -186,7 +195,7 @@ async def on_text(m: Message):
         return  # ignore unknown commands
     prompt, params = parse_message(m.text)
     if not prompt:
-        await m.answer("Пришли текст промта 🙂")
+        await m.answer("Пришли готовый промт на английском 🙂")
         return
     asyncio.create_task(do_gen(m.chat.id, m.from_user.id, prompt, params))
 
