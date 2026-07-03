@@ -173,8 +173,12 @@ HELP = (
     "• <code>seed=N</code> — зафиксировать сид (повторяемость)\n"
     "• <code>lora=N</code> — сила realism-LoRA (дефолт 1.0, 0 = выкл)\n"
     "• <code>steps=N</code> — шаги (дефолт 8)\n\n"
-    "Под картинкой — 🎲 новый сид · 🔁 тот же сид. В подписи виден seed — "
-    "записывай удачные промпты."
+    "🔒 <b>Зафиксировать лицо</b> (чтобы не перевбивать длинное описание каждый раз):\n"
+    "<code>/face</code> + описание лица → бот запомнит. Потом шли только "
+    "<b>тело / одежду / сцену</b> — лицо приклеится само. <code>/facereset</code> — сбросить.\n\n"
+    "Промт можно длинный — до ~4000 символов, лицо+тело+одежда+сцена влезают в одно "
+    "сообщение. Под фото бот покажет полный промт (тапни — скопируется).\n"
+    "Кнопки под картинкой: 🎲 новый сид · 🔁 тот же сид."
 )
 
 
@@ -195,6 +199,42 @@ async def cmd_help(m: Message):
     await m.answer(HELP)
 
 
+FACE = {}  # user_id -> saved face description
+
+
+@dp.message(Command("face"))
+async def cmd_face(m: Message):
+    arg = m.text.partition(" ")[2].strip()
+    if not arg:
+        cur = FACE.get(m.from_user.id)
+        if cur:
+            await m.answer(
+                f"🔒 Лицо сейчас запомнено:\n<code>{html.escape(cur)}</code>\n\n"
+                "Шли тело / одежду / сцену обычным сообщением — приклею лицо сам.\n"
+                "Сбросить: /facereset"
+            )
+        else:
+            await m.answer(
+                "Задай лицо так:\n"
+                "<code>/face a young woman with red hair, green eyes, freckles, "
+                "soft round face</code>\n\n"
+                "Потом шли только тело / одежду / сцену — бот сам склеит лицо + остальное."
+            )
+        return
+    FACE[m.from_user.id] = arg
+    await m.answer(
+        f"✅ Лицо запомнено ({len(arg)} симв).\n"
+        "Теперь шли <b>тело / одежду / сцену</b> обычным сообщением — приклею лицо сам.\n"
+        "Сбросить: /facereset"
+    )
+
+
+@dp.message(Command("facereset"))
+async def cmd_facereset(m: Message):
+    FACE.pop(m.from_user.id, None)
+    await m.answer("🔓 Лицо сброшено — промт берётся как есть.")
+
+
 @dp.message(F.text)
 async def on_text(m: Message):
     if m.text.startswith("/"):
@@ -203,6 +243,9 @@ async def on_text(m: Message):
     if not prompt:
         await m.answer("Пришли готовый промт на английском 🙂")
         return
+    face = FACE.get(m.from_user.id)
+    if face:
+        prompt = f"{face}, {prompt}"  # locked face + body/clothes/scene
     asyncio.create_task(do_gen(m.chat.id, m.from_user.id, prompt, params))
 
 
@@ -235,8 +278,14 @@ async def do_gen(chat_id, user_id, prompt, params):
         imgs = extract_images(output)
         if not imgs:
             raise RuntimeError(f"пустой ответ воркера: {json.dumps(output)[:400]}")
-        cap = (f"🌱 <code>seed={seed}</code>  📐 {w}×{h}  ⚙️ steps {steps} · lora {lora}\n"
-               f"📝 {html.escape(prompt[:850])}")
+        head = f"🌱 <code>seed={seed}</code> · 📐 {w}×{h} · steps {steps} · lora {lora}"
+        esc = html.escape(prompt)
+        prompt_line = f"\n📝 <code>{esc}</code>"
+        # keep caption under Telegram's 1024 limit; long prompt -> separate message
+        if len(head) + len(prompt_line) <= 1000:
+            cap, extra_prompt = head + prompt_line, None
+        else:
+            cap, extra_prompt = head + "\n📝 полный промт ниже ↓", f"📝 <code>{esc[:3900]}</code>"
         for i, (kind, val) in enumerate(imgs):
             photo = BufferedInputFile(base64.b64decode(val), "gen.png") if kind == "b64" else val
             await bot.send_photo(
@@ -244,6 +293,8 @@ async def do_gen(chat_id, user_id, prompt, params):
                 caption=cap if i == 0 else None,
                 reply_markup=regen_kb() if i == 0 else None,
             )
+        if extra_prompt:
+            await bot.send_message(chat_id, extra_prompt)
         await status.delete()
     except Exception as e:
         log.exception("gen failed")
